@@ -29,4 +29,3 @@ Thumbs.db
 # Build output
 dist/
 build/
-*.tar.gz
