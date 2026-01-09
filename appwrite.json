@@ -16,7 +16,11 @@
       "entrypoint": "src/main.js",
       "commands": "npm install",
       "path": ".",
-      "environment": "node"
+      "environment": "node",
+      "variables": {
+        "APPWRITE_API_KEY": "",
+        "STORAGE_BUCKET_ID": "default"
+      }
     }
   ]
 }
