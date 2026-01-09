@@ -17,7 +17,7 @@ This function automatically deletes temporary storage files that are older than 
 ### Function Settings
 - **Runtime**: Node.js 18.0
 - **Timeout**: 60 seconds
-- **Entrypoint**: `src/main.js`
+- **Entrypoint**: `main.js`
 
 ## Setup Instructions
 
@@ -88,8 +88,7 @@ The function processes files in batches of 100 to handle large storage buckets e
 .
 ├── appwrite.json         # Appwrite function configuration
 ├── package.json          # Node.js dependencies
-├── src/
-│   └── main.js          # Main function code
+├── main.js              # Main function code
 └── README.md            # This file
 ```
 
