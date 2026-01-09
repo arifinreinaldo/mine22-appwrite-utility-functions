@@ -2,7 +2,7 @@
   "name": "appwrite-daily-cron-function",
   "version": "1.0.0",
   "description": "Appwrite function that runs daily at 23:59 SGT",
-  "main": "src/main.js",
+  "main": "main.js",
   "type": "module",
   "scripts": {
     "test": "echo \"No tests specified\" && exit 0"
