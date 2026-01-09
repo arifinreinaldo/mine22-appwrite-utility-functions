@@ -65,8 +65,10 @@ export default async ({ req, res, log, error }) => {
           try {
             // Check if file name starts with "temp"
             if (file.name.toLowerCase().startsWith('temp')) {
-              // Check if file is older than 1 day
               const fileCreatedAt = new Date(file.$createdAt).getTime();
+              const fileAgeSeconds = Math.floor((Date.now() - fileCreatedAt) / 1000);
+
+              log(`Found temp file: ${file.name} (Age: ${fileAgeSeconds}s, Created: ${file.$createdAt})`);
 
               if (fileCreatedAt < cutoffTime) {
                 // Delete the file
@@ -80,7 +82,9 @@ export default async ({ req, res, log, error }) => {
                   size: file.sizeOriginal
                 });
 
-                log(`Deleted: ${file.name} (ID: ${file.$id}, Created: ${file.$createdAt})`);
+                log(`✓ Deleted: ${file.name} (Age: ${fileAgeSeconds}s exceeded ${maxAgeSeconds}s threshold)`);
+              } else {
+                log(`✗ Skipped: ${file.name} (Age: ${fileAgeSeconds}s < ${maxAgeSeconds}s threshold)`);
               }
             }
           } catch (fileError) {
