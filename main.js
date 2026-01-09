@@ -58,17 +58,24 @@ export default async ({ req, res, log, error }) => {
 
         log(`Processing batch: ${offset} to ${offset + filesList.files.length} of ${filesList.total}`);
 
+        if (filesList.total === 0 && offset === 0) {
+          log('⚠ Warning: Bucket appears to be empty (0 files found)');
+        }
+
         totalScanned += filesList.files.length;
 
         // Process each file
         for (const file of filesList.files) {
           try {
+            const fileCreatedAt = new Date(file.$createdAt).getTime();
+            const fileAgeSeconds = Math.floor((Date.now() - fileCreatedAt) / 1000);
+
+            // Log all files being scanned
+            log(`Scanning: ${file.name} (Age: ${fileAgeSeconds}s, Created: ${file.$createdAt})`);
+
             // Check if file name starts with "temp"
             if (file.name.toLowerCase().startsWith('temp')) {
-              const fileCreatedAt = new Date(file.$createdAt).getTime();
-              const fileAgeSeconds = Math.floor((Date.now() - fileCreatedAt) / 1000);
-
-              log(`Found temp file: ${file.name} (Age: ${fileAgeSeconds}s, Created: ${file.$createdAt})`);
+              log(`  → Matches temp prefix`);
 
               if (fileCreatedAt < cutoffTime) {
                 // Delete the file
@@ -82,10 +89,12 @@ export default async ({ req, res, log, error }) => {
                   size: file.sizeOriginal
                 });
 
-                log(`✓ Deleted: ${file.name} (Age: ${fileAgeSeconds}s exceeded ${maxAgeSeconds}s threshold)`);
+                log(`  ✓ Deleted: ${file.name} (Age: ${fileAgeSeconds}s exceeded ${maxAgeSeconds}s threshold)`);
               } else {
-                log(`✗ Skipped: ${file.name} (Age: ${fileAgeSeconds}s < ${maxAgeSeconds}s threshold)`);
+                log(`  ✗ Skipped: ${file.name} (Age: ${fileAgeSeconds}s < ${maxAgeSeconds}s threshold)`);
               }
+            } else {
+              log(`  → Does not match temp prefix, skipping`);
             }
           } catch (fileError) {
             totalErrors++;
