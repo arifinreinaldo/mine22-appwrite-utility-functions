@@ -1,0 +1,22 @@
+{
+  "$schema": "https://appwrite.io/schemas/appwrite.json",
+  "projectId": "your-project-id",
+  "projectName": "Daily Cron Function",
+  "functions": [
+    {
+      "$id": "daily-cron-function",
+      "name": "Daily Cron Function",
+      "runtime": "node-18.0",
+      "execute": [],
+      "events": [],
+      "schedule": "59 23 * * *",
+      "timeout": 60,
+      "enabled": true,
+      "logging": true,
+      "entrypoint": "src/main.js",
+      "commands": "npm install",
+      "path": ".",
+      "environment": "node"
+    }
+  ]
+}
