@@ -1,6 +1,6 @@
 {
   "$schema": "https://appwrite.io/schemas/appwrite.json",
-  "projectId": "your-project-id",
+  "projectId": "694172460017e01592a1",
   "projectName": "Daily Cron Function",
   "functions": [
     {

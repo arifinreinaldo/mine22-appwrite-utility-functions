@@ -1,4 +1,4 @@
-import { Client, Databases, Users } from 'node-appwrite';
+import { Client, Storage } from 'node-appwrite';
 
 /**
  * Daily Cron Job Function
@@ -18,37 +18,109 @@ export default async ({ req, res, log, error }) => {
       .setProject(process.env.APPWRITE_FUNCTION_PROJECT_ID)
       .setKey(process.env.APPWRITE_API_KEY || req.headers['x-appwrite-key'] || '');
 
-    // Example: Initialize services you might need
-    // const databases = new Databases(client);
-    // const users = new Users(client);
+    // Initialize Storage service
+    const storage = new Storage(client);
 
-    // ============================================
-    // ADD YOUR CUSTOM DAILY CRON LOGIC HERE
-    // ============================================
+    // Get bucket ID from environment variable or use default
+    const bucketId = process.env.STORAGE_BUCKET_ID || 'default';
 
-    // Example tasks you might want to perform:
-    // 1. Clean up old data
-    // 2. Generate daily reports
-    // 3. Send notifications
-    // 4. Backup data
-    // 5. Update statistics
+    log('Starting cleanup of temporary files...');
+    log('Bucket ID: ' + bucketId);
 
-    log('Performing daily tasks...');
+    // Calculate cutoff date (1 day ago)
+    const oneDayAgo = new Date();
+    oneDayAgo.setDate(oneDayAgo.getDate() - 1);
+    const cutoffTime = oneDayAgo.getTime();
 
-    // Example: Your custom logic here
+    log('Cutoff time: ' + oneDayAgo.toISOString());
+
+    // Track cleanup statistics
+    let totalScanned = 0;
+    let totalDeleted = 0;
+    let totalErrors = 0;
+    const deletedFiles = [];
+    const errors = [];
+
+    // List all files in the bucket
+    let hasMore = true;
+    let offset = 0;
+    const limit = 100; // Process 100 files at a time
+
+    while (hasMore) {
+      try {
+        // List files with pagination
+        const filesList = await storage.listFiles(bucketId, [], limit, offset);
+
+        log(`Processing batch: ${offset} to ${offset + filesList.files.length} of ${filesList.total}`);
+
+        totalScanned += filesList.files.length;
+
+        // Process each file
+        for (const file of filesList.files) {
+          try {
+            // Check if file name starts with "temp"
+            if (file.name.toLowerCase().startsWith('temp')) {
+              // Check if file is older than 1 day
+              const fileCreatedAt = new Date(file.$createdAt).getTime();
+
+              if (fileCreatedAt < cutoffTime) {
+                // Delete the file
+                await storage.deleteFile(bucketId, file.$id);
+
+                totalDeleted++;
+                deletedFiles.push({
+                  id: file.$id,
+                  name: file.name,
+                  createdAt: file.$createdAt,
+                  size: file.sizeOriginal
+                });
+
+                log(`Deleted: ${file.name} (ID: ${file.$id}, Created: ${file.$createdAt})`);
+              }
+            }
+          } catch (fileError) {
+            totalErrors++;
+            const errorMsg = `Failed to delete file ${file.name}: ${fileError.message}`;
+            error(errorMsg);
+            errors.push({
+              file: file.name,
+              fileId: file.$id,
+              error: fileError.message
+            });
+          }
+        }
+
+        // Check if there are more files to process
+        hasMore = filesList.files.length === limit;
+        offset += limit;
+
+      } catch (listError) {
+        error('Error listing files: ' + listError.message);
+        errors.push({
+          operation: 'listFiles',
+          error: listError.message
+        });
+        hasMore = false; // Stop on list error
+      }
+    }
+
     const executionTime = new Date().toISOString();
     const result = {
-      success: true,
+      success: totalErrors === 0,
       executedAt: executionTime,
-      message: 'Daily cron job completed successfully',
-      // Add any custom data you want to track
-      tasksCompleted: [
-        'Task 1: Placeholder',
-        'Task 2: Placeholder'
-      ]
+      message: `Cleanup completed: ${totalDeleted} files deleted, ${totalErrors} errors`,
+      statistics: {
+        totalScanned,
+        totalDeleted,
+        totalErrors,
+        cutoffDate: oneDayAgo.toISOString(),
+        bucketId
+      },
+      deletedFiles: deletedFiles.length > 0 ? deletedFiles : undefined,
+      errors: errors.length > 0 ? errors : undefined
     };
 
-    log('Daily cron job completed successfully');
+    log(`Cleanup completed: Scanned ${totalScanned}, Deleted ${totalDeleted}, Errors ${totalErrors}`);
 
     // Return success response
     return res.json({

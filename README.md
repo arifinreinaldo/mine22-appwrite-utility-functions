@@ -1,10 +1,10 @@
-# Appwrite Daily Cron Function
+# Appwrite Daily Storage Cleanup Function
 
-An Appwrite Cloud Function that runs automatically every day at 23:59 SGT (Singapore Time).
+An Appwrite Cloud Function that runs automatically every day at 23:59 SGT (Singapore Time) to clean up temporary storage files.
 
 ## Overview
 
-This function is designed to execute scheduled daily tasks at the end of each day. The cron schedule is set to run at 23:59 in Singapore Time (SGT/UTC+8).
+This function automatically deletes temporary storage files that are older than 1 day. It scans your storage bucket for files with names starting with the prefix "temp" (e.g., `temp-2026-01-11-image.jpg`) and removes any files that were uploaded more than 24 hours ago.
 
 ## Configuration
 
@@ -21,19 +21,16 @@ This function is designed to execute scheduled daily tasks at the end of each da
 
 ## Setup Instructions
 
-### 1. Update Project Configuration
+### 1. Project Configuration
 
-Edit `appwrite.json` and replace `"your-project-id"` with your actual Appwrite project ID:
-
-```json
-"projectId": "your-actual-project-id"
-```
+The project is already configured with project ID: `694172460017e01592a1`
 
 ### 2. Set Environment Variables
 
 In your Appwrite Console, configure the following environment variables for this function:
 
-- `APPWRITE_API_KEY` - API key with necessary permissions for your tasks
+- `APPWRITE_API_KEY` - API key with **storage delete permissions** (required)
+- `STORAGE_BUCKET_ID` - The ID of the storage bucket to clean up (defaults to "default" if not set)
 
 ### 3. Deploy the Function
 
@@ -62,36 +59,28 @@ If your server is in UTC, to run at 23:59 SGT (UTC+8), the cron should be:
 59 15 * * *  # 15:59 UTC = 23:59 SGT
 ```
 
-## Customization
+## How It Works
 
-### Adding Your Daily Tasks
+### Cleanup Logic
 
-Edit `src/main.js` and add your custom logic in the designated section:
+1. **Scans Storage Bucket**: Lists all files in the configured storage bucket
+2. **Filters by Prefix**: Identifies files with names starting with "temp" (case-insensitive)
+3. **Checks Age**: Compares file creation date against 24-hour threshold
+4. **Deletes Old Files**: Removes files older than 1 day
+5. **Reports Results**: Logs detailed statistics and any errors
 
-```javascript
-// ============================================
-// ADD YOUR CUSTOM DAILY CRON LOGIC HERE
-// ============================================
+### File Naming Pattern
 
-// Example tasks:
-const databases = new Databases(client);
+Files matching this pattern will be cleaned up:
+- `temp-2026-01-11-image.jpg` ✓
+- `temp_document.pdf` ✓
+- `TEMP-file.png` ✓
+- `temporary.txt` ✗ (doesn't start with "temp")
+- `my-temp.jpg` ✗ (doesn't start with "temp")
 
-// Clean up old data
-await databases.deleteDocument('database-id', 'collection-id', 'document-id');
+### Pagination
 
-// Generate reports
-// Send notifications
-// Backup data
-```
-
-### Common Use Cases
-
-- **Data Cleanup**: Remove old or expired records
-- **Daily Reports**: Generate and send daily statistics
-- **Notifications**: Send end-of-day notifications to users
-- **Backups**: Create daily backups of important data
-- **Analytics**: Update daily analytics and metrics
-- **Batch Processing**: Process accumulated data from the day
+The function processes files in batches of 100 to handle large storage buckets efficiently without timing out.
 
 ## Function Structure
 
@@ -121,19 +110,51 @@ View function execution logs in the Appwrite Console:
   "data": {
     "success": true,
     "executedAt": "2026-01-09T15:59:00.000Z",
-    "message": "Daily cron job completed successfully",
-    "tasksCompleted": ["..."]
+    "message": "Cleanup completed: 5 files deleted, 0 errors",
+    "statistics": {
+      "totalScanned": 150,
+      "totalDeleted": 5,
+      "totalErrors": 0,
+      "cutoffDate": "2026-01-08T15:59:00.000Z",
+      "bucketId": "default"
+    },
+    "deletedFiles": [
+      {
+        "id": "file-id-1",
+        "name": "temp-2026-01-07-image.jpg",
+        "createdAt": "2026-01-07T10:30:00.000Z",
+        "size": 102400
+      }
+    ]
   },
   "timestamp": "2026-01-09T15:59:00.000Z"
 }
 ```
 
-### Error Response
+### Response with Errors
 
 ```json
 {
-  "success": false,
-  "error": "Error message",
+  "success": true,
+  "data": {
+    "success": false,
+    "executedAt": "2026-01-09T15:59:00.000Z",
+    "message": "Cleanup completed: 3 files deleted, 2 errors",
+    "statistics": {
+      "totalScanned": 100,
+      "totalDeleted": 3,
+      "totalErrors": 2,
+      "cutoffDate": "2026-01-08T15:59:00.000Z",
+      "bucketId": "default"
+    },
+    "errors": [
+      {
+        "file": "temp-locked.jpg",
+        "fileId": "file-id-xyz",
+        "error": "Permission denied"
+      }
+    ]
+  },
   "timestamp": "2026-01-09T15:59:00.000Z"
 }
 ```
@@ -149,15 +170,29 @@ View function execution logs in the Appwrite Console:
 
 ### Permission Errors
 
-1. Verify `APPWRITE_API_KEY` has necessary permissions
-2. Check execution role settings in function configuration
+1. Verify `APPWRITE_API_KEY` has **storage delete permissions**
+2. Check that the API key has access to the specified bucket
+3. Ensure the function execution role has proper permissions
+
+### No Files Being Deleted
+
+1. Verify files start with "temp" prefix (case-insensitive)
+2. Check that files are actually older than 24 hours
+3. Confirm the correct `STORAGE_BUCKET_ID` is set
+4. Review function logs to see what files are being scanned
 
 ### Timeout Issues
 
-If tasks take longer than 60 seconds:
-1. Increase timeout in `appwrite.json`
-2. Optimize your code
-3. Consider breaking tasks into smaller chunks
+If the function times out with large storage buckets:
+1. Increase timeout in `appwrite.json` (max varies by plan)
+2. The function processes 100 files per batch to minimize timeout risk
+3. Consider running the function more frequently (e.g., every 12 hours)
+
+### Wrong Bucket Being Cleaned
+
+1. Check the `STORAGE_BUCKET_ID` environment variable
+2. If not set, it defaults to "default"
+3. Verify the bucket ID in function logs
 
 ## License
 
