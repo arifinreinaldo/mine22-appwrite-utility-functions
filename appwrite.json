@@ -19,7 +19,8 @@
       "environment": "node",
       "variables": {
         "APPWRITE_API_KEY": "",
-        "STORAGE_BUCKET_ID": "default"
+        "STORAGE_BUCKET_ID": "default",
+        "FILE_MAX_AGE_SECONDS": "86400"
       }
     }
   ]

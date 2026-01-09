@@ -4,7 +4,7 @@ An Appwrite Cloud Function that runs automatically every day at 23:59 SGT (Singa
 
 ## Overview
 
-This function automatically deletes temporary storage files that are older than 1 day. It scans your storage bucket for files with names starting with the prefix "temp" (e.g., `temp-2026-01-11-image.jpg`) and removes any files that were uploaded more than 24 hours ago.
+This function automatically deletes temporary storage files based on a configurable age threshold. It scans your storage bucket for files with names starting with the prefix "temp" (e.g., `temp-2026-01-11-image.jpg`) and removes any files that exceed the configured age (default: 24 hours).
 
 ## Configuration
 
@@ -31,6 +31,12 @@ In your Appwrite Console, configure the following environment variables for this
 
 - `APPWRITE_API_KEY` - API key with **storage delete permissions** (required)
 - `STORAGE_BUCKET_ID` - The ID of the storage bucket to clean up (defaults to "default" if not set)
+- `FILE_MAX_AGE_SECONDS` - Maximum age of files in seconds before deletion (defaults to 86400 = 24 hours)
+  - Examples:
+    - `3600` = 1 hour
+    - `43200` = 12 hours
+    - `86400` = 24 hours (default)
+    - `604800` = 7 days
 
 ### 3. Deploy the Function
 
@@ -65,8 +71,8 @@ If your server is in UTC, to run at 23:59 SGT (UTC+8), the cron should be:
 
 1. **Scans Storage Bucket**: Lists all files in the configured storage bucket
 2. **Filters by Prefix**: Identifies files with names starting with "temp" (case-insensitive)
-3. **Checks Age**: Compares file creation date against 24-hour threshold
-4. **Deletes Old Files**: Removes files older than 1 day
+3. **Checks Age**: Compares file creation date against configured age threshold (in seconds)
+4. **Deletes Old Files**: Removes files exceeding the maximum age
 5. **Reports Results**: Logs detailed statistics and any errors
 
 ### File Naming Pattern
@@ -114,6 +120,7 @@ View function execution logs in the Appwrite Console:
       "totalScanned": 150,
       "totalDeleted": 5,
       "totalErrors": 0,
+      "maxAgeSeconds": 86400,
       "cutoffDate": "2026-01-08T15:59:00.000Z",
       "bucketId": "default"
     },
@@ -143,6 +150,7 @@ View function execution logs in the Appwrite Console:
       "totalScanned": 100,
       "totalDeleted": 3,
       "totalErrors": 2,
+      "maxAgeSeconds": 86400,
       "cutoffDate": "2026-01-08T15:59:00.000Z",
       "bucketId": "default"
     },
@@ -176,9 +184,10 @@ View function execution logs in the Appwrite Console:
 ### No Files Being Deleted
 
 1. Verify files start with "temp" prefix (case-insensitive)
-2. Check that files are actually older than 24 hours
-3. Confirm the correct `STORAGE_BUCKET_ID` is set
-4. Review function logs to see what files are being scanned
+2. Check that files are older than the configured `FILE_MAX_AGE_SECONDS`
+3. Review function logs to see the max age being used and cutoff time
+4. Confirm the correct `STORAGE_BUCKET_ID` is set
+5. Review function logs to see what files are being scanned
 
 ### Timeout Issues
 

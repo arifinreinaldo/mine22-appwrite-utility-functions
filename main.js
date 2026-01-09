@@ -27,12 +27,17 @@ export default async ({ req, res, log, error }) => {
     log('Starting cleanup of temporary files...');
     log('Bucket ID: ' + bucketId);
 
-    // Calculate cutoff date (1 day ago)
-    const oneDayAgo = new Date();
-    oneDayAgo.setDate(oneDayAgo.getDate() - 1);
-    const cutoffTime = oneDayAgo.getTime();
+    // Get max file age from environment variable (in seconds)
+    // Default: 86400 seconds = 24 hours = 1 day
+    const maxAgeSeconds = parseInt(process.env.FILE_MAX_AGE_SECONDS || '86400', 10);
 
-    log('Cutoff time: ' + oneDayAgo.toISOString());
+    // Calculate cutoff date
+    const cutoffDate = new Date();
+    cutoffDate.setTime(cutoffDate.getTime() - (maxAgeSeconds * 1000));
+    const cutoffTime = cutoffDate.getTime();
+
+    log('Max file age: ' + maxAgeSeconds + ' seconds (' + (maxAgeSeconds / 3600).toFixed(2) + ' hours)');
+    log('Cutoff time: ' + cutoffDate.toISOString());
 
     // Track cleanup statistics
     let totalScanned = 0;
@@ -113,7 +118,8 @@ export default async ({ req, res, log, error }) => {
         totalScanned,
         totalDeleted,
         totalErrors,
-        cutoffDate: oneDayAgo.toISOString(),
+        maxAgeSeconds,
+        cutoffDate: cutoffDate.toISOString(),
         bucketId
       },
       deletedFiles: deletedFiles.length > 0 ? deletedFiles : undefined,
