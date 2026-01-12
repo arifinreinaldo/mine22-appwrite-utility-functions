@@ -39,6 +39,20 @@ export default async ({ req, res, log, error }) => {
     const bucketId = process.env.STORAGE_BUCKET_ID || 'default';
 
     log('Bucket ID: ' + bucketId);
+    log('Bucket ID length: ' + bucketId.length + ' chars');
+
+    // Validate bucket ID format
+    if (bucketId.length > 36) {
+      error('❌ CRITICAL: Bucket ID exceeds 36 characters!');
+      throw new Error('Bucket ID must be at most 36 characters');
+    }
+
+    if (!/^[a-zA-Z0-9_][a-zA-Z0-9_]*$/.test(bucketId)) {
+      error('❌ CRITICAL: Bucket ID contains invalid characters!');
+      error('  Bucket ID can only contain: a-z, A-Z, 0-9, underscore');
+      error('  Bucket ID cannot start with underscore');
+      throw new Error('Invalid bucket ID format');
+    }
 
     // Get max file age from environment variable (in seconds)
     // Default: 86400 seconds = 24 hours = 1 day
