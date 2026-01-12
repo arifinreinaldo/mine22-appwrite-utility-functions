@@ -9,21 +9,12 @@ import { Client, Storage, Query } from 'node-appwrite';
  */
 export default async ({ req, res, log, error }) => {
   try {
-    // Log the execution start
-    log('Daily cron job started at: ' + new Date().toISOString());
-
     // Initialize Appwrite client
     const apiKey = process.env.APPWRITE_API_KEY || req.headers['x-appwrite-key'] || '';
     const endpoint = process.env.APPWRITE_FUNCTION_API_ENDPOINT || 'https://cloud.appwrite.io/v1';
     const projectId = process.env.APPWRITE_FUNCTION_PROJECT_ID;
 
-    log('Starting cleanup of temporary files...');
-    log('Endpoint: ' + endpoint);
-    log('Project ID: ' + projectId);
-    log('API Key set: ' + (apiKey ? 'Yes (length: ' + apiKey.length + ')' : 'No - MISSING!'));
-
     if (!apiKey) {
-      error('❌ CRITICAL: APPWRITE_API_KEY is not set!');
       throw new Error('APPWRITE_API_KEY environment variable is required');
     }
 
@@ -38,24 +29,7 @@ export default async ({ req, res, log, error }) => {
     // Get bucket ID from environment variable or use default
     const bucketId = process.env.STORAGE_BUCKET_ID || 'default';
 
-    log('Bucket ID: ' + bucketId);
-    log('Bucket ID length: ' + bucketId.length + ' chars');
-
-    // Validate bucket ID format
-    if (bucketId.length > 36) {
-      error('❌ CRITICAL: Bucket ID exceeds 36 characters!');
-      throw new Error('Bucket ID must be at most 36 characters');
-    }
-
-    if (!/^[a-zA-Z0-9_][a-zA-Z0-9_]*$/.test(bucketId)) {
-      error('❌ CRITICAL: Bucket ID contains invalid characters!');
-      error('  Bucket ID can only contain: a-z, A-Z, 0-9, underscore');
-      error('  Bucket ID cannot start with underscore');
-      throw new Error('Invalid bucket ID format');
-    }
-
     // Get max file age from environment variable (in seconds)
-    // Default: 86400 seconds = 24 hours = 1 day
     const maxAgeSeconds = parseInt(process.env.FILE_MAX_AGE_SECONDS || '86400', 10);
 
     // Calculate cutoff date
@@ -63,8 +37,7 @@ export default async ({ req, res, log, error }) => {
     cutoffDate.setTime(cutoffDate.getTime() - (maxAgeSeconds * 1000));
     const cutoffTime = cutoffDate.getTime();
 
-    log('Max file age: ' + maxAgeSeconds + ' seconds (' + (maxAgeSeconds / 3600).toFixed(2) + ' hours)');
-    log('Cutoff time: ' + cutoffDate.toISOString());
+    log(`Starting cleanup: bucket=${bucketId}, maxAge=${maxAgeSeconds}s`);
 
     // Track cleanup statistics
     let totalScanned = 0;
@@ -81,9 +54,6 @@ export default async ({ req, res, log, error }) => {
     while (hasMore) {
       try {
         // List files with pagination
-        log(`Attempting to list files: bucketId="${bucketId}", offset=${offset}, limit=${limit}`);
-
-        // Try simple call first - SDK v15 might need just bucketId string
         const filesList = await storage.listFiles(
           bucketId,
           [
@@ -92,54 +62,30 @@ export default async ({ req, res, log, error }) => {
           ]
         );
 
-        log(`Response: Found ${filesList.files.length} files in this batch, ${filesList.total} total files in bucket`);
-
-        if (filesList.total === 0 && offset === 0) {
-          log('⚠ Warning: Bucket appears to be empty (0 files found)');
-          log('⚠ This could mean:');
-          log('  1. The bucket is actually empty');
-          log('  2. The bucket ID is incorrect');
-          log('  3. The API key lacks permission to list files in this bucket');
-        }
-
         totalScanned += filesList.files.length;
 
         // Process each file
         for (const file of filesList.files) {
           try {
             const fileCreatedAt = new Date(file.$createdAt).getTime();
-            const fileAgeSeconds = Math.floor((Date.now() - fileCreatedAt) / 1000);
 
-            // Log all files being scanned
-            log(`Scanning: ${file.name} (Age: ${fileAgeSeconds}s, Created: ${file.$createdAt})`);
+            // Check if file name starts with "temp" and is older than threshold
+            if (file.name.toLowerCase().startsWith('temp') && fileCreatedAt < cutoffTime) {
+              await storage.deleteFile(bucketId, file.$id);
 
-            // Check if file name starts with "temp"
-            if (file.name.toLowerCase().startsWith('temp')) {
-              log(`  → Matches temp prefix`);
+              totalDeleted++;
+              deletedFiles.push({
+                id: file.$id,
+                name: file.name,
+                createdAt: file.$createdAt,
+                size: file.sizeOriginal
+              });
 
-              if (fileCreatedAt < cutoffTime) {
-                // Delete the file
-                await storage.deleteFile(bucketId, file.$id);
-
-                totalDeleted++;
-                deletedFiles.push({
-                  id: file.$id,
-                  name: file.name,
-                  createdAt: file.$createdAt,
-                  size: file.sizeOriginal
-                });
-
-                log(`  ✓ Deleted: ${file.name} (Age: ${fileAgeSeconds}s exceeded ${maxAgeSeconds}s threshold)`);
-              } else {
-                log(`  ✗ Skipped: ${file.name} (Age: ${fileAgeSeconds}s < ${maxAgeSeconds}s threshold)`);
-              }
-            } else {
-              log(`  → Does not match temp prefix, skipping`);
+              log(`Deleted: ${file.name}`);
             }
           } catch (fileError) {
             totalErrors++;
-            const errorMsg = `Failed to delete file ${file.name}: ${fileError.message}`;
-            error(errorMsg);
+            error(`Failed to delete ${file.name}: ${fileError.message}`);
             errors.push({
               file: file.name,
               fileId: file.$id,
@@ -153,21 +99,13 @@ export default async ({ req, res, log, error }) => {
         offset += limit;
 
       } catch (listError) {
-        error('❌ Error listing files from bucket: ' + listError.message);
-        error('Error details: ' + JSON.stringify({
-          message: listError.message,
-          code: listError.code,
-          type: listError.type,
-          response: listError.response
-        }));
+        error(`Error listing files: ${listError.message}`);
         totalErrors++;
         errors.push({
           operation: 'listFiles',
-          bucketId: bucketId,
-          error: listError.message,
-          code: listError.code
+          error: listError.message
         });
-        hasMore = false; // Stop on list error
+        hasMore = false;
       }
     }
 
@@ -188,7 +126,7 @@ export default async ({ req, res, log, error }) => {
       errors: errors.length > 0 ? errors : undefined
     };
 
-    log(`Cleanup completed: Scanned ${totalScanned}, Deleted ${totalDeleted}, Errors ${totalErrors}`);
+    log(`Completed: ${totalDeleted} deleted, ${totalErrors} errors`);
 
     // Return success response
     return res.json({
