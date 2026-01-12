@@ -80,16 +80,17 @@ export default async ({ req, res, log, error }) => {
 
     while (hasMore) {
       try {
-        // List files with pagination using SDK v15+ object syntax
+        // List files with pagination
         log(`Attempting to list files: bucketId="${bucketId}", offset=${offset}, limit=${limit}`);
 
-        const filesList = await storage.listFiles({
-          bucketId: bucketId,
-          queries: [
+        // Try simple call first - SDK v15 might need just bucketId string
+        const filesList = await storage.listFiles(
+          bucketId,
+          [
             Query.limit(limit),
             Query.offset(offset)
           ]
-        });
+        );
 
         log(`Response: Found ${filesList.files.length} files in this batch, ${filesList.total} total files in bucket`);
 
