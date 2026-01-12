@@ -68,10 +68,18 @@ export default async ({ req, res, log, error }) => {
       try {
         // List files with pagination
         log(`Attempting to list files: bucketId="${bucketId}", offset=${offset}, limit=${limit}`);
-        const filesList = await storage.listFiles(bucketId, [
-          Query.limit(limit),
-          Query.offset(offset)
-        ]);
+
+        // Try simple call first without queries to debug
+        let filesList;
+        if (offset === 0) {
+          // First batch - try without parameters
+          log('Attempting simple listFiles call without queries...');
+          filesList = await storage.listFiles(bucketId);
+        } else {
+          // For now, stop pagination after first batch
+          hasMore = false;
+          break;
+        }
 
         log(`Response: Found ${filesList.files.length} files in this batch, ${filesList.total} total files in bucket`);
 
@@ -129,9 +137,9 @@ export default async ({ req, res, log, error }) => {
           }
         }
 
-        // Check if there are more files to process
-        hasMore = filesList.files.length === limit;
-        offset += limit;
+        // For now, only process first batch (no pagination until Query API works)
+        hasMore = false;
+        log('Note: Pagination temporarily disabled - processing first batch only');
 
       } catch (listError) {
         error('❌ Error listing files from bucket: ' + listError.message);
