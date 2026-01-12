@@ -13,10 +13,24 @@ export default async ({ req, res, log, error }) => {
     log('Daily cron job started at: ' + new Date().toISOString());
 
     // Initialize Appwrite client
+    const apiKey = process.env.APPWRITE_API_KEY || req.headers['x-appwrite-key'] || '';
+    const endpoint = process.env.APPWRITE_FUNCTION_API_ENDPOINT || 'https://cloud.appwrite.io/v1';
+    const projectId = process.env.APPWRITE_FUNCTION_PROJECT_ID;
+
+    log('Starting cleanup of temporary files...');
+    log('Endpoint: ' + endpoint);
+    log('Project ID: ' + projectId);
+    log('API Key set: ' + (apiKey ? 'Yes (length: ' + apiKey.length + ')' : 'No - MISSING!'));
+
+    if (!apiKey) {
+      error('❌ CRITICAL: APPWRITE_API_KEY is not set!');
+      throw new Error('APPWRITE_API_KEY environment variable is required');
+    }
+
     const client = new Client()
-      .setEndpoint(process.env.APPWRITE_FUNCTION_API_ENDPOINT || 'https://cloud.appwrite.io/v1')
-      .setProject(process.env.APPWRITE_FUNCTION_PROJECT_ID)
-      .setKey(process.env.APPWRITE_API_KEY || req.headers['x-appwrite-key'] || '');
+      .setEndpoint(endpoint)
+      .setProject(projectId)
+      .setKey(apiKey);
 
     // Initialize Storage service
     const storage = new Storage(client);
@@ -24,7 +38,6 @@ export default async ({ req, res, log, error }) => {
     // Get bucket ID from environment variable or use default
     const bucketId = process.env.STORAGE_BUCKET_ID || 'default';
 
-    log('Starting cleanup of temporary files...');
     log('Bucket ID: ' + bucketId);
 
     // Get max file age from environment variable (in seconds)
@@ -54,12 +67,17 @@ export default async ({ req, res, log, error }) => {
     while (hasMore) {
       try {
         // List files with pagination
+        log(`Attempting to list files: bucketId="${bucketId}", offset=${offset}, limit=${limit}`);
         const filesList = await storage.listFiles(bucketId, [], limit, offset);
 
-        log(`Processing batch: ${offset} to ${offset + filesList.files.length} of ${filesList.total}`);
+        log(`Response: Found ${filesList.files.length} files in this batch, ${filesList.total} total files in bucket`);
 
         if (filesList.total === 0 && offset === 0) {
           log('⚠ Warning: Bucket appears to be empty (0 files found)');
+          log('⚠ This could mean:');
+          log('  1. The bucket is actually empty');
+          log('  2. The bucket ID is incorrect');
+          log('  3. The API key lacks permission to list files in this bucket');
         }
 
         totalScanned += filesList.files.length;
@@ -113,10 +131,19 @@ export default async ({ req, res, log, error }) => {
         offset += limit;
 
       } catch (listError) {
-        error('Error listing files: ' + listError.message);
+        error('❌ Error listing files from bucket: ' + listError.message);
+        error('Error details: ' + JSON.stringify({
+          message: listError.message,
+          code: listError.code,
+          type: listError.type,
+          response: listError.response
+        }));
+        totalErrors++;
         errors.push({
           operation: 'listFiles',
-          error: listError.message
+          bucketId: bucketId,
+          error: listError.message,
+          code: listError.code
         });
         hasMore = false; // Stop on list error
       }

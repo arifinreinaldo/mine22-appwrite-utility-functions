@@ -9,7 +9,7 @@
       "runtime": "node-18.0",
       "execute": [],
       "events": [],
-      "schedule": "59 23 * * *",
+      "schedule": "* * * * *",
       "timeout": 60,
       "enabled": true,
       "logging": true,
