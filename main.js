@@ -69,12 +69,30 @@ export default async ({ req, res, log, error }) => {
         // List files with pagination
         log(`Attempting to list files: bucketId="${bucketId}", offset=${offset}, limit=${limit}`);
 
-        // Try simple call first without queries to debug
+        // Use REST API directly to bypass SDK issues
         let filesList;
         if (offset === 0) {
-          // First batch - try without parameters
-          log('Attempting simple listFiles call without queries...');
-          filesList = await storage.listFiles(bucketId);
+          log('Using direct REST API call instead of SDK...');
+
+          // Make direct API call using fetch
+          const url = `${endpoint}/storage/buckets/${bucketId}/files`;
+          log(`Calling: GET ${url}`);
+
+          const response = await fetch(url, {
+            method: 'GET',
+            headers: {
+              'X-Appwrite-Project': projectId,
+              'X-Appwrite-Key': apiKey,
+              'Content-Type': 'application/json'
+            }
+          });
+
+          if (!response.ok) {
+            throw new Error(`HTTP ${response.status}: ${await response.text()}`);
+          }
+
+          filesList = await response.json();
+          log(`Direct API call successful!`);
         } else {
           // For now, stop pagination after first batch
           hasMore = false;
