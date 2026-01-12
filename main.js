@@ -66,38 +66,16 @@ export default async ({ req, res, log, error }) => {
 
     while (hasMore) {
       try {
-        // List files with pagination
+        // List files with pagination using SDK v15+ object syntax
         log(`Attempting to list files: bucketId="${bucketId}", offset=${offset}, limit=${limit}`);
 
-        // Use REST API directly to bypass SDK issues
-        let filesList;
-        if (offset === 0) {
-          log('Using direct REST API call instead of SDK...');
-
-          // Make direct API call using fetch
-          const url = `${endpoint}/storage/buckets/${bucketId}/files`;
-          log(`Calling: GET ${url}`);
-
-          const response = await fetch(url, {
-            method: 'GET',
-            headers: {
-              'X-Appwrite-Project': projectId,
-              'X-Appwrite-Key': apiKey,
-              'Content-Type': 'application/json'
-            }
-          });
-
-          if (!response.ok) {
-            throw new Error(`HTTP ${response.status}: ${await response.text()}`);
-          }
-
-          filesList = await response.json();
-          log(`Direct API call successful!`);
-        } else {
-          // For now, stop pagination after first batch
-          hasMore = false;
-          break;
-        }
+        const filesList = await storage.listFiles({
+          bucketId: bucketId,
+          queries: [
+            Query.limit(limit),
+            Query.offset(offset)
+          ]
+        });
 
         log(`Response: Found ${filesList.files.length} files in this batch, ${filesList.total} total files in bucket`);
 
@@ -155,9 +133,9 @@ export default async ({ req, res, log, error }) => {
           }
         }
 
-        // For now, only process first batch (no pagination until Query API works)
-        hasMore = false;
-        log('Note: Pagination temporarily disabled - processing first batch only');
+        // Check if there are more files to process
+        hasMore = filesList.files.length === limit;
+        offset += limit;
 
       } catch (listError) {
         error('❌ Error listing files from bucket: ' + listError.message);
