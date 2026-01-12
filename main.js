@@ -1,4 +1,4 @@
-import { Client, Storage } from 'node-appwrite';
+import { Client, Storage, Query } from 'node-appwrite';
 
 /**
  * Daily Cron Job Function
@@ -68,7 +68,10 @@ export default async ({ req, res, log, error }) => {
       try {
         // List files with pagination
         log(`Attempting to list files: bucketId="${bucketId}", offset=${offset}, limit=${limit}`);
-        const filesList = await storage.listFiles(bucketId, [], limit, offset);
+        const filesList = await storage.listFiles(bucketId, [
+          Query.limit(limit),
+          Query.offset(offset)
+        ]);
 
         log(`Response: Found ${filesList.files.length} files in this batch, ${filesList.total} total files in bucket`);
 
